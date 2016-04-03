@@ -13,16 +13,28 @@ import (
 )
 
 type Client struct {
-	Before func(*http.Request, *http.Client)
-	Root   string
+	Before      func(*http.Request, *http.Client)
+	HandleError func(*ErrorResponse) error
+	Root        string
+}
+
+type ErrorResponse struct {
+	Status              string
+	StatusCode          int
+	ResponseBody        []byte
+	ResponseContentType string
+}
+
+func (e ErrorResponse) Error() string {
+	return fmt.Sprintf("%s [%s]", e.Status, e.ResponseContentType)
 }
 
 type resultInfo struct {
-	errorIndex   int
-	payloadIndex int
-	payloadType  reflect.Type
-	resultLength int
-	contentType  string
+	errorIndex          int
+	payloadIndex        int
+	payloadType         reflect.Type
+	resultLength        int
+	responseContentType string
 }
 
 func (info *resultInfo) result(err error, bytes []byte) []reflect.Value {
@@ -37,29 +49,39 @@ func (info *resultInfo) result(err error, bytes []byte) []reflect.Value {
 	if info.payloadIndex > -1 {
 		if bytes != nil {
 			target := reflect.New(info.payloadType)
-			respContentType := info.contentType
-			if respContentType != "" {
-				if strings.Contains(respContentType, ";") {
-					respContentType = respContentType[:strings.Index(respContentType, ";")]
-				}
-			} else {
-				respContentType = "application/json"
-			}
-			switch respContentType {
-			case "application/json":
-				err = json.Unmarshal(bytes, target.Interface())
-			case "application/xml":
-				err = xml.Unmarshal(bytes, target.Interface())
-			case "text/xml":
-				err = xml.Unmarshal(bytes, target.Interface())
+
+			switch info.payloadType.Name() {
+			case "string":
+				contents := string(bytes)
+				result[info.payloadIndex] = reflect.ValueOf(contents)
+
 			default:
-				fmt.Printf("Content Type (%s) not supported.", respContentType)
+				respContentType := info.responseContentType
+				if respContentType != "" {
+					if strings.Contains(respContentType, ";") {
+						// strip any extra detail
+						respContentType = respContentType[:strings.Index(respContentType, ";")]
+					}
+				} else {
+					respContentType = "application/json"
+				}
+				switch respContentType {
+				case "application/json":
+					err = json.Unmarshal(bytes, target.Interface())
+				case "application/xml":
+					err = xml.Unmarshal(bytes, target.Interface())
+				case "text/xml":
+					err = xml.Unmarshal(bytes, target.Interface())
+				default:
+					fmt.Printf("\nContent Type (%s) not supported by snooze.\n", respContentType)
+				}
+
+				if err != nil {
+					return info.result(err, nil)
+				}
+				result[info.payloadIndex] = target.Elem()
 			}
 
-			if err != nil {
-				return info.result(err, nil)
-			}
-			result[info.payloadIndex] = target.Elem()
 		} else {
 			result[info.payloadIndex] = reflect.Zero(info.payloadType)
 		}
@@ -100,6 +122,7 @@ func (c *Client) Create(in interface{}) {
 		}
 
 		fieldValue.Set(reflect.MakeFunc(fieldType, func(args []reflect.Value) []reflect.Value {
+			// Prepare Request Parameters
 			path := originalPath
 			for n, av := range args {
 				if av.Kind() == reflect.Struct {
@@ -109,6 +132,7 @@ func (c *Client) Create(in interface{}) {
 				path = strings.Replace(path, fmt.Sprintf("{%v}", n), url.QueryEscape(fmt.Sprint(av.Interface())), -1)
 			}
 
+			// Prepare Request Body
 			var err error
 			buffer := make([]byte, 0)
 			if method != "GET" && body != nil {
@@ -126,6 +150,7 @@ func (c *Client) Create(in interface{}) {
 				}
 			}
 
+			// Prepare Request
 			req, err := http.NewRequest(method, c.Root+path, bytes.NewBuffer(buffer))
 			if err != nil {
 				return info.result(err, nil)
@@ -135,16 +160,45 @@ func (c *Client) Create(in interface{}) {
 			if c.Before != nil {
 				c.Before(req, client)
 			}
+
+			// Send Request
 			resp, err := client.Do(req)
 			if err != nil {
 				return info.result(err, nil)
 			}
-			info.contentType = resp.Header.Get("Content-Type")
+
+			// Process Response
+			info.responseContentType = resp.Header.Get("Content-Type")
 			bytes, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				return info.result(err, nil)
 			}
-			return info.result(nil, bytes)
+			if isErrorResponse(resp) {
+				apiErr := ErrorResponse{
+					Status:              resp.Status,
+					StatusCode:          resp.StatusCode,
+					ResponseBody:        bytes,
+					ResponseContentType: info.responseContentType,
+				}
+				var handled error
+				if c.HandleError != nil {
+					handled = c.HandleError(&apiErr)
+				} else {
+					handled = apiErr
+				}
+
+				return info.result(handled, nil)
+			} else {
+				return info.result(nil, bytes)
+			}
 		}))
 	}
+}
+
+func isErrorResponse(r *http.Response) bool {
+	if r.StatusCode > 399 {
+		return true
+	}
+
+	return false
 }
