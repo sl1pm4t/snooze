@@ -125,7 +125,7 @@ func (c *Client) Create(in interface{}) {
 			// Prepare Request Parameters
 			path := originalPath
 			for n, av := range args {
-				if av.Kind() == reflect.Struct {
+				if av.Kind() == reflect.Struct || av.Kind() == reflect.Ptr {
 					body = av.Interface()
 					continue
 				}
