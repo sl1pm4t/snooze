@@ -7,15 +7,18 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"reflect"
 	"strings"
+	"github.com/Sirupsen/logrus"
 )
 
 type Client struct {
 	Before      func(*http.Request, *http.Client)
 	HandleError func(*ErrorResponse) error
 	Root        string
+	Logger      *logrus.Logger
 }
 
 type ErrorResponse struct {
@@ -161,10 +164,22 @@ func (c *Client) Create(in interface{}) {
 				c.Before(req, client)
 			}
 
+			if c.Logger != nil {
+				dump, _ := httputil.DumpRequest(req, true)
+				reqdump := strings.Replace(string(dump), "\\n", "\n", -1)
+				c.Logger.Infof("REQUEST --->\n%q\n", reqdump)
+			}
+
 			// Send Request
 			resp, err := client.Do(req)
 			if err != nil {
 				return info.result(err, nil)
+			}
+
+			if c.Logger != nil {
+				dump, _ := httputil.DumpResponse(resp, true)
+				respdump := strings.Replace(string(dump), "\\n", "\n", -1)
+				c.Logger.Infof("RESPONSE <---\n%q\n", respdump)
 			}
 
 			// Process Response
