@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/Sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"reflect"
 	"strings"
-	"github.com/Sirupsen/logrus"
 )
 
 type Client struct {
@@ -167,7 +167,7 @@ func (c *Client) Create(in interface{}) {
 			if c.Logger != nil {
 				dump, _ := httputil.DumpRequest(req, true)
 				reqdump := strings.Replace(string(dump), "\\n", "\n", -1)
-				c.Logger.Infof("REQUEST --->\n%q\n", reqdump)
+				c.Logger.Debugf("REQUEST --->\n%q\n", reqdump)
 			}
 
 			// Send Request
@@ -179,7 +179,7 @@ func (c *Client) Create(in interface{}) {
 			if c.Logger != nil {
 				dump, _ := httputil.DumpResponse(resp, true)
 				respdump := strings.Replace(string(dump), "\\n", "\n", -1)
-				c.Logger.Infof("RESPONSE <---\n%q\n", respdump)
+				c.Logger.Debugf("RESPONSE <---\n%q\n", respdump)
 			}
 
 			// Process Response
