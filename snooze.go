@@ -5,17 +5,19 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/Sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"reflect"
 	"strings"
+
+	"github.com/Sirupsen/logrus"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 type Client struct {
-	Before      func(*http.Request, *http.Client)
+	Before      func(*retryablehttp.Request, *retryablehttp.Client)
 	HandleError func(*ErrorResponse) error
 	Root        string
 	Logger      *logrus.Logger
@@ -154,18 +156,18 @@ func (c *Client) Create(in interface{}) {
 			}
 
 			// Prepare Request
-			req, err := http.NewRequest(method, c.Root+path, bytes.NewBuffer(buffer))
+			req, err := retryablehttp.NewRequest(method, c.Root+path, bytes.NewReader(buffer))
 			if err != nil {
 				return info.result(err, nil)
 			}
 			req.Header.Set("Content-Type", contentType)
-			client := new(http.Client)
+			client := retryablehttp.NewClient()
 			if c.Before != nil {
 				c.Before(req, client)
 			}
 
 			if c.Logger != nil {
-				dump, _ := httputil.DumpRequest(req, true)
+				dump, _ := httputil.DumpRequest(req.Request, true)
 				reqdump := strings.Replace(string(dump), "\\n", "\n", -1)
 				c.Logger.Debugf("REQUEST --->\n%q\n", reqdump)
 			}

@@ -1,6 +1,8 @@
 package snooze
 
-import "net/http"
+import (
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
+)
 
 type api struct {
 	Login   func(loginData) (userData, error)             `method:"POST" path:"/auth/login"`
@@ -11,7 +13,7 @@ type api struct {
 func Example() {
 	client := Client{
 		Root: "http://example.com",
-		Before: func(r *http.Request, c *http.Client) {
+		Before: func(r *retryablehttp.Request, c *retryablehttp.Client) {
 			values := r.URL.Query()
 			values.Add("session", "123456")
 			r.URL.RawQuery = values.Encode()
