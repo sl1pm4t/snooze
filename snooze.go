@@ -99,13 +99,16 @@ var nilError = reflect.Zero(reflect.TypeOf((*error)(nil)).Elem())
 func (c *Client) Create(in interface{}) {
 	inputValue := reflect.ValueOf(in).Elem()
 	inputType := inputValue.Type()
+
 	for i := 0; i < inputValue.NumField(); i++ {
+
 		fieldValue := inputValue.Field(i)
 		fieldStruct := inputType.Field(i)
 		fieldType := fieldStruct.Type
 		originalPath := fieldStruct.Tag.Get("path")
 		method := fieldStruct.Tag.Get("method")
 		contentType := fieldStruct.Tag.Get("contentType")
+
 		if contentType == "" {
 			contentType = "application/json"
 		}
@@ -116,6 +119,7 @@ func (c *Client) Create(in interface{}) {
 			errorIndex:   -1,
 			payloadIndex: -1,
 		}
+
 		for n := 0; n < info.resultLength; n++ {
 			out := fieldType.Out(n)
 			if out == reflect.TypeOf((*error)(nil)).Elem() {
