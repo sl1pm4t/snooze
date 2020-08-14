@@ -12,8 +12,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"github.com/sirupsen/logrus"
 )
 
 type Client struct {
